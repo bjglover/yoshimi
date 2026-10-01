@@ -34,7 +34,6 @@ The Windows LV2 has been manually tested in REAPER with:
 - MIDI input and audio output
 - factory patch banks
 - 24 banks / 917 instruments
-- arpeggio patches
 
 This remains an experimental port. Wider testing with other Windows
 LV2 hosts, project/state restoration, multiple instances, automation
