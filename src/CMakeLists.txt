@@ -169,7 +169,9 @@ check_c_source_compiles (
 
 if (NOT LIBC_HAS_ARGP)
     message(STATUS "libc does not have argp")
-    find_library (ARGP_LIB argp REQUIRED)
+    if (NOT WIN32)
+        find_library (ARGP_LIB argp REQUIRED)
+    endif ()
 endif ()
 
 # libz
@@ -191,7 +193,9 @@ else()
 endif ()
 
 # Jack
-pkg_check_modules (JACK REQUIRED jack>=0.115.6)
+if (NOT WIN32)
+    pkg_check_modules (JACK REQUIRED jack>=0.115.6)
+endif ()
 
 # fontconfig
 pkg_check_modules (FONTCONFIG REQUIRED fontconfig>=0.22)
@@ -393,8 +397,8 @@ if (BuildWithFLTK)
 endif ()
 
 add_definitions (
-    -D'YOSHIMI_VERSION="${YOSHIMI_VERSION}"'
-    -D'BASE_INSTALL_DIR="${CMAKE_INSTALL_PREFIX}"'
+-DYOSHIMI_VERSION=\"${YOSHIMI_VERSION}\"
+-DBASE_INSTALL_DIR=\"${CMAKE_INSTALL_PREFIX}\"
     -DYOSHI_FIFO_DIR="${FifoDirectory}"
 )
 
