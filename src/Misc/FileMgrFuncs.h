@@ -36,8 +36,13 @@
 #include <unistd.h>
 #include <stdio.h>
 #include <zlib.h>
+#ifdef _WIN32
+#include <filesystem>
+#include <sys/utime.h>
+#endif
 
 #include "globals.h"
+#include "Misc/WindowsPaths.h"
 
 #define OUR_PATH_MAX 4096
 /*
@@ -388,10 +393,18 @@ inline bool copyFile(string const& source, string const& destination, char optio
 
     if (option == 2)
     {
+#ifdef _WIN32
+        struct _utimbuf times;
+        times.actime = sourceInfo.st_atime;
+        times.modtime = sourceInfo.st_mtime;
+        if (_utime(destination.c_str(), &times) != 0)
+            return 3;
+#else
         struct timespec ts[2];
         ts[1].tv_sec = (sourceInfo.st_mtime % 10000000000);
         ts[1].tv_nsec = (sourceInfo.st_mtime / 10000000000);
         utimensat(0, destination.c_str(), ts, 0);
+#endif
     }
     return 0;
 }
@@ -461,7 +474,13 @@ inline int countDir(const std::string dirName)
     char dir2[3] = {'.', '.', 0};
     while ((fn = readdir(dir)))
     {
+#ifdef _WIN32
+        struct stat entry;
+        string path = dirName + "/" + fn->d_name;
+        if (stat(path.c_str(), &entry) == 0 && S_ISDIR(entry.st_mode))
+#else
         if (fn->d_type == DT_DIR)
+#endif
         {
             if (strcmp(fn->d_name, dir1) !=0 && strcmp(fn->d_name, dir2) !=0)
                 ++ count;
@@ -695,6 +714,13 @@ inline bool createEmptyFile(string const& filename)
 
 inline bool createDir(string const& dirname)
 {
+#ifdef _WIN32
+    // Handle drive roots, UNC paths and either Windows path separator.
+    // As on POSIX, false means success (including an existing directory).
+    std::error_code error;
+    std::filesystem::create_directories(dirname, error);
+    return bool(error);
+#else
     if (isDirectory(dirname))
         return false; // don't waste time. it's already here!
     size_t pos = 1;
@@ -716,6 +742,7 @@ inline bool createDir(string const& dirname)
             failed = mkdir(nextDir.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
     }
     return failed;
+#endif
 }
 
 
@@ -779,15 +806,39 @@ inline string extendLocalPath(string const& leaf)
 
 inline string userHome()
 {
+#ifdef _WIN32
+    // Native Windows hosts do not normally define the POSIX HOME variable.
+    const char* candidates[] = {getenv("HOME"), getenv("USERPROFILE"),
+                                getenv("TEMP"), getenv("TMP")};
+    for (const char* candidate : candidates)
+    {
+        if (candidate && *candidate && isDirectory(candidate))
+        {
+            string home(candidate);
+            // Keep the path separators expected by Yoshimi's file helpers.
+            for (char& separator : home)
+                if (separator == '\\') separator = '/';
+            if (home.back() != '/') home += '/';
+            return home;
+        }
+    }
+    return "./";
+#else
     string home = string(getenv("HOME"));
     if (home.empty() || !isDirectory(home))
         home = string("/tmp");
 return home + '/';
+#endif
 }
 
 inline string localDir()
 {
+#ifdef _WIN32
+    string local = windowsUserDirectory(false);
+    if (local.empty()) return {};
+#else
     string local = userHome() + ".local/share/" + YOSHIMI;
+#endif
     if (!isDirectory(local))
     {
         if (createDir(local))
@@ -798,7 +849,12 @@ inline string localDir()
 
 inline string configDir()
 {
+#ifdef _WIN32
+    string config = windowsUserDirectory(true);
+    if (config.empty()) return {};
+#else
     string config = userHome() + string(EXTEN::config) + "/" + YOSHIMI;
+#endif
     if (!isDirectory(config))
     {
         if (createDir(config))
@@ -815,6 +871,12 @@ inline string configDir()
  */
 inline string findExampleFile(string leafname)
 {
+#ifdef _WIN32
+    string custom = localDir() + "/" + leafname;
+    if (isRegularFile(custom)) return custom;
+    string factory = windowsFactoryDirectory() + "/examples/" + leafname;
+    return isRegularFile(factory) ? factory : "";
+#else
     string dir = localPath();
     string fullname = "";
     if (!dir.empty())
@@ -846,6 +908,7 @@ inline string findExampleFile(string leafname)
         }
     }
     return fullname;
+#endif
 }
 
 

@@ -304,7 +304,7 @@ set (Effects_sources
 )
 
 set (Misc_sources
-    Misc/Bank.cpp  Misc/BuildScheduler.cpp  Misc/CmdOptions.cpp
+    Misc/Bank.cpp  Misc/BuildScheduler.cpp  Misc/CmdOptions.cpp Misc/WindowsPaths.cpp
     Misc/Config.cpp  Misc/InstanceManager.cpp  Misc/Microtonal.cpp  Misc/Part.cpp
     Misc/SynthEngine.cpp  Misc/WavFile.cpp  Misc/XMLStore.cpp
 )
@@ -482,6 +482,9 @@ endif ()
 add_executable (yoshimi ${ProgSources} main.cpp)
 
 target_link_libraries (yoshimi ${ExternLibraries})
+if(WIN32)
+    target_link_libraries(yoshimi shell32)
+endif()
 
 
 if (ARGP_LIB)

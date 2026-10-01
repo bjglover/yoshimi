@@ -35,7 +35,11 @@
 
 #include <FL/platform.H>
 #include <cairo.h>
+#ifdef _WIN32
+#include <cairo-win32.h>
+#else
 #include <cairo-xlib.h>
+#endif
 
 using func::limit;
 
@@ -196,10 +200,14 @@ void WidgetPDial::draw()
                // works both with Wayland and X11
 
 #else
-    // Legacy solution : retrieve drawing surface from XServer
+    // Legacy solution : retrieve the native drawing surface
+#ifdef _WIN32
+    cairo_surface_t* Xsurface = cairo_win32_surface_create(fl_gc);
+#else
     cairo_surface_t* Xsurface = cairo_xlib_surface_create
         (fl_display, fl_window, fl_visual->visual,Fl_Window::current()->w() * scale,
         Fl_Window::current()->h() * scale);
+#endif
     cairo_t* cr = cairo_create (Xsurface);
 #endif
     cairo_save(cr);

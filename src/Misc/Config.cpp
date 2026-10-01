@@ -34,6 +34,7 @@
 #include <libgen.h>
 #include <limits.h>
 #include <unistd.h>
+#include "LV2_Plugin/WindowsDiagnostics.h"
 #include <cassert>
 #include <memory>
 #include <bitset>
@@ -441,6 +442,16 @@ bool Config::initFromPersistentConfig()
     }
 
     buildConfigLocation();
+
+#ifdef _WIN32
+    // Also repair an empty preset directory created before resources existed.
+    // copyDir option 0 preserves every existing user preset.
+    if (!createDir(presetDir))
+        copyDir(file::windowsFactoryDirectory() + "/presets", presetDir, 0);
+    string themes = file::localDir() + "/themes";
+    if (!createDir(themes))
+        copyDir(file::windowsFactoryDirectory() + "/examples/themes", themes, 0);
+#endif
 
     if (synth.getUniqueId() == 0 && sessionStage != _SYS_::type::RestoreConf)
     {
@@ -1281,6 +1292,9 @@ void Config::migrateLegacyPresetsList(XMLtree& basePars)
 void Config::defaultPresets()
 {
     auto presetDirsToTry = std::array{presetDir
+#ifdef _WIN32
+                                     };
+#else
                                      ,file::configDir()+"/presets"
                                      ,extendLocalPath("/presets")
                                         /*
@@ -1290,6 +1304,7 @@ void Config::defaultPresets()
                                      ,string{"/usr/share/yoshimi/presets"}
                                      ,string{"/usr/local/share/yoshimi/presets"}
                                      };
+#endif
     int actual{0};
     Log("Setup default preset directories...", _SYS_::LogNotSerious);
     for (string& presetDir : presetDirsToTry)
@@ -1304,6 +1319,7 @@ void Config::defaultPresets()
 
 void Config::Log(string const& msg, char tostderr)
 {
+    if (isLV2) yoshimiLV2Trace("Config::Log: %s", msg.c_str());
     if ((tostderr & _SYS_::LogNotSerious) && hideErrors)
         return;
     else if(!(tostderr & _SYS_::LogError))
@@ -1651,6 +1667,11 @@ void Config::saveJackSession()
 
 std::string Config::findHtmlManual()
 {
+#ifdef _WIN32
+    string manual = file::windowsFactoryDirectory()
+                  + "/doc/yoshimi_user_guide/files/yoshimi_user_guide_version";
+    return isRegularFile(manual) ? manual : "";
+#else
     string namelist = "";
     string tempnames = "";
     if(file::cmd2string("find /usr/share/doc/ -xdev -type f -name 'yoshimi_user_guide_version' 2>/dev/null", tempnames))
@@ -1689,6 +1710,7 @@ std::string Config::findHtmlManual()
         }
     }
     return found;
+#endif
 }
 
 
@@ -1860,4 +1882,3 @@ float Config::getConfigLimits(CommandBlock* getData)
     }
     return value;
 }
-

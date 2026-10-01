@@ -31,7 +31,11 @@
 
 #include <FL/platform.H>
 #include <cairo.h>
+#ifdef _WIN32
+#include <cairo-win32.h>
+#else
 #include <cairo-xlib.h>
+#endif
 
 #include <iostream>
 
@@ -1466,10 +1470,14 @@ void custom_graphics(ValueType vt, float val,int W,int H)
             cairo_t *cr = Fl::cairo_make_current(Fl_Window::current());
 
 #else
-            // Legacy solution : retrieve drawing surface from XServer
+            // Legacy solution : retrieve the native drawing surface
+#ifdef _WIN32
+            cairo_surface_t* Xsurface = cairo_win32_surface_create(fl_gc);
+#else
             cairo_surface_t* Xsurface = cairo_xlib_surface_create
                 (fl_display, fl_window, fl_visual->visual,
                  Fl_Window::current()->w(), Fl_Window::current()->h());
+#endif
             cairo_t *cr = cairo_create (Xsurface);
 #endif
             cairo_save(cr);

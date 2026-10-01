@@ -1214,6 +1214,24 @@ void Bank::checkShare(string sourceDir, string destinationDir)
 
 bool Bank::transferDefaultDirs(string bankdirs[])
 {
+#ifdef _WIN32
+    // Banks are editable. Seed writable copies, leaving bundled originals alone.
+    // Retry after an empty first run; never replace an existing user bank.
+    if (createDir(bankdirs[0])) return false;
+    list<string> factoryBanks;
+    listDir(&factoryBanks, bankdirs[1]);
+    for (const string& name : factoryBanks)
+    {
+        string source = bankdirs[1] + "/" + name;
+        string destination = bankdirs[0] + "/" + name;
+        if (isValidBank(source) && !isDirectory(destination))
+        {
+            if (!createDir(destination))
+                copyDir(source, destination, 1);
+        }
+    }
+    return true;
+#else
     if (!isDirectory(foundLocal))
         return false;
     bool found = false;
@@ -1252,6 +1270,7 @@ bool Bank::transferDefaultDirs(string bankdirs[])
         }
     }
     return found;
+#endif
 }
 
 
@@ -1288,6 +1307,11 @@ void Bank::checkLocalBanks()
 
 void Bank::addDefaultRootDirs(string bankdirs[])
 {
+#ifdef _WIN32
+    // Do not expose immutable bundle resources as editable bank roots.
+    size_t root = addRootDir(bankdirs[0]);
+    if (root) changeRootID(root, 5);
+#else
     int tot = 0;
     int i = 0;
     while (bankdirs[i] != "@end")
@@ -1302,6 +1326,7 @@ void Bank::addDefaultRootDirs(string bankdirs[])
 
     for (int i = tot; i > 0; --i)
         changeRootID(i, i * 5);
+#endif
 }
 
 
@@ -1579,12 +1604,17 @@ bool Bank::establishBanks(optional<string> bankFile)
 
     string bankdirs[] = {
         foundLocal + "yoshimi/banks",
+#ifdef _WIN32
+        file::windowsFactoryDirectory() + "/banks",
+        "", "", "", "", "",
+#else
         "/usr/share/yoshimi/banks",
         "/usr/local/share/yoshimi/banks",
         "/usr/share/zynaddsubfx/banks",
         "/usr/local/share/zynaddsubfx/banks",
         foundLocal + "zynaddsubfx/banks",
         extendLocalPath("/banks"),
+#endif
         "@end"
     };
 
@@ -1635,12 +1665,14 @@ bool Bank::establishBanks(optional<string> bankFile)
     }
     installRoots();
 
+#ifndef _WIN32
     if (isDirectory(foundLocal))
     {
         string shareID = foundLocal + "version";
         if (loadText(shareID) != to_string(synth.getRuntime().build_ID))
             updateShare(bankdirs, foundLocal, shareID);
     }
+#endif
     return newRoots;
 }
 

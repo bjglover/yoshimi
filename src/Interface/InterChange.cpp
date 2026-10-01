@@ -218,14 +218,20 @@ void* InterChange::sortResultsThread()
 }
 
 
-InterChange::~InterChange()
+void InterChange::stopSortResultsThread()
 {
     if (sortResultsThreadHandle)
     {
         // Get it to quit.
         spinSortResultsThread();
         pthread_join(sortResultsThreadHandle, 0);
+        sortResultsThreadHandle = 0;
     }
+}
+
+InterChange::~InterChange()
+{
+    stopSortResultsThread();
     undoRedoClear();
 
     sem_destroy(&sortResultsThreadSemaphore);
@@ -962,7 +968,11 @@ int InterChange::indirectMain(CommandBlock& cmd, uchar &newMsg, bool &guiTo, str
 
                 size_t pos = found.rfind("files/yoshimi_user_guide_version");
                 found = found.substr(0, pos);
+#ifdef _WIN32
+                file::windowsOpenDocument(found + "index.html");
+#else
                 file::cmd2string("xdg-open " + found + "index.html &");
+#endif
             }
             else
             {

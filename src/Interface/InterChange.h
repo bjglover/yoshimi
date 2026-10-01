@@ -106,6 +106,7 @@ class InterChange : private DataText
 
         sem_t sortResultsThreadSemaphore;
         void spinSortResultsThread();
+        void stopSortResultsThread();
 
         void generateSpecialInstrument(int npart, std::string name);
         void mediate();

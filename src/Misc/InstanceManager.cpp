@@ -28,6 +28,7 @@
 #include "MusicIO/MusicClient.h"
 #include "Misc/FormatFuncs.h"
 #include "Misc/Util.h"
+#include "LV2_Plugin/WindowsDiagnostics.h"
 #ifndef YOSHIMI_LV2_PLUGIN
 #include "Misc/CmdOptions.h"
 #include "Misc/TestInvoker.h"
@@ -298,11 +299,13 @@ InstanceManager::Instance& InstanceManager::SynthGroom::createInstance(uint inst
  */
 bool InstanceManager::Instance::startUp(PluginCreator pluginCreator)
 {
+    yoshimiLV2Trace("Instance startUp: id=%u plugin=%d", getID(), bool(pluginCreator));
     cout << "\nStart-up Synth-Instance("<< getID() << ")..."<< endl;
     state = BOOTING;
     bool isLV2 = bool(pluginCreator);
     runtime().isLV2 = isLV2;
     runtime().loadConfig();
+    yoshimiLV2Trace("Instance loadConfig complete");
     assert (not runtime().runSynth);
     if (isLV2)
     {
@@ -310,6 +313,7 @@ bool InstanceManager::Instance::startUp(PluginCreator pluginCreator)
         runtime().init();
         if (client->open(pluginCreator))
             runtime().runSynth = true;
+        yoshimiLV2Trace("Instance client open complete: runSynth=%d", bool(runtime().runSynth));
     }
     else
     {
@@ -338,12 +342,15 @@ bool InstanceManager::Instance::startUp(PluginCreator pluginCreator)
         runtime().Log("Failed to instantiate MusicClient",_SYS_::LogError);
     else
     {
+        yoshimiLV2Trace("Instance SynthEngine::Init begin: rate=%u buffer=%u", client->getSamplerate(), client->getBuffersize());
         if (not synth->Init(client->getSamplerate(), client->getBuffersize()))
             runtime().Log("SynthEngine init failed",_SYS_::LogError);
         else
         {
+            yoshimiLV2Trace("Instance SynthEngine::Init complete; installBanks begin");
             // discover persistent bank file structure
             synth->installBanks();
+            yoshimiLV2Trace("Instance installBanks complete");
             if (isPrimary())
             {
                 synth->loadHistory();
@@ -355,6 +362,7 @@ bool InstanceManager::Instance::startUp(PluginCreator pluginCreator)
                 runtime().Log("Failed to start MusicIO",_SYS_::LogError);
             else
             {// engine started successfully....
+                yoshimiLV2Trace("Instance client start complete");
 #ifdef GUI_FLTK
                 if (runtime().showGui)
                     synth->setWindowTitle(client->midiClientName());
@@ -400,6 +408,11 @@ void InstanceManager::Instance::shutDown()
     runtime().runSynth.store(false, std::memory_order_release); // signal to synth and background threads
     synth->saveBanks();
     client->close();  // may block until background threads terminate
+#if defined(_WIN32) && defined(YOSHIMI_LV2_PLUGIN)
+    // The primary instance is retained after cleanup. Join its thread now,
+    // rather than in DLL static destruction under the Windows loader lock.
+    synth->interchange.stopSortResultsThread();
+#endif
     runtime().flushLog();
     state = DEFUNCT;
 }

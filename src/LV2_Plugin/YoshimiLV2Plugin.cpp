@@ -28,6 +28,8 @@
 #include "Interface/Text2Data.h"
 #include "Interface/MidiDecode.h"
 #include "MusicIO/MusicClient.h"
+#include "WindowsDiagnostics.h"
+#include "PluginIdentity.h"
 #ifdef GUI_FLTK
     #include "MasterUI.h"
 #endif
@@ -80,7 +82,7 @@ typedef struct _Yoshimi_LV2_Options_Option {
 
 LV2_Descriptor yoshimi_lv2_desc =
 {
-    "http://yoshimi.sourceforge.net/lv2_plugin",
+    YOSHIMI_LV2_PLUGIN_URI,
     YoshimiLV2Plugin::instantiate,
     YoshimiLV2Plugin::connect_port,
     YoshimiLV2Plugin::activate,
@@ -93,7 +95,7 @@ LV2_Descriptor yoshimi_lv2_desc =
 
 LV2_Descriptor yoshimi_lv2_multi_desc =
 {
-    "http://yoshimi.sourceforge.net/lv2_plugin_multi",
+    YOSHIMI_LV2_PLUGIN_URI "_multi",
     YoshimiLV2Plugin::instantiate,
     YoshimiLV2Plugin::connect_port,
     YoshimiLV2Plugin::activate,
@@ -104,6 +106,19 @@ LV2_Descriptor yoshimi_lv2_multi_desc =
 };
 
 namespace {
+    void traceHostFeatures(const char* stage, LV2_Feature const* const* features)
+    {
+#if defined(_WIN32) && defined(YOSHIMI_LV2_WINDOWS_DIAGNOSTICS)
+        yoshimiLV2Trace("%s feature list=%p", stage, features);
+        if (!features) return;
+        for (unsigned i = 0; features[i]; ++i)
+            yoshimiLV2Trace("%s feature[%u] URI=%s data=%p", stage, i, features[i]->URI, features[i]->data);
+#else
+        (void)stage;
+        (void)features;
+#endif
+    }
+
     inline bool isMultiFeed(LV2_Descriptor const& desc)
     {
         return string{desc.URI} == string{yoshimi_lv2_multi_desc.URI};
@@ -323,12 +338,14 @@ YoshimiLV2Plugin::YoshimiLV2Plugin(SynthEngine& _synth
     , lastFallbackBpm{-1}
     , isReady{false}
 {
+    yoshimiLV2Trace("plugin constructor begin: sampleRate=%u bundle=%s", _sampleRate, bundlePath);
     _uridMap.handle = NULL;
     _uridMap.map = NULL;
     const LV2_Feature *f = NULL;
     const Yoshimi_LV2_Options_Option *options = NULL;
     while ((f = *features) != NULL)
     {
+        yoshimiLV2Trace("host feature URI=%s data=%p", f->URI, f->data);
         if (strcmp(f->URI, LV2_URID__map) == 0)
         {
             _uridMap = *(static_cast<LV2_URID_Map *>(f->data));
@@ -341,8 +358,10 @@ YoshimiLV2Plugin::YoshimiLV2Plugin(SynthEngine& _synth
     }
 
     uint32_t nomBufSize = 0;
+    yoshimiLV2Trace("features parsed: urid map present=%d options=%p", _uridMap.map != nullptr, options);
     if (_uridMap.map and options)
     {
+        yoshimiLV2Trace("mapping URIDs begin");
         _midi_event_id = _uridMap.map(_uridMap.handle, LV2_MIDI__MidiEvent);
         _yoshimi_state_id = _uridMap.map(_uridMap.handle, YOSHIMI_STATE_URI);
         _atom_string_id = _uridMap.map(_uridMap.handle, LV2_ATOM__String);
@@ -364,13 +383,19 @@ YoshimiLV2Plugin::YoshimiLV2Plugin(SynthEngine& _synth
         _atom_bar_beat = _uridMap.map(_uridMap.handle, LV2_TIME__barBeat);
         _atom_bpm = _uridMap.map(_uridMap.handle, LV2_TIME__beatsPerMinute);
         _atom_beatUnit = _uridMap.map(_uridMap.handle, LV2_TIME__beatUnit);
+        yoshimiLV2Trace("mapping URIDs complete: MIDI=%u state=%u string=%u int=%u sequence=%u max=%u min=%u nominal=%u",
+            _midi_event_id, _yoshimi_state_id, _atom_string_id, _atom_int,
+            _atom_type_sequence, maxBufSz, minBufSz, nomBufSz);
         while (options->size > 0 && options->value != NULL)
         {
+            yoshimiLV2Trace("option: context=%u subject=%u key=%u type=%u size=%u value=%p",
+                unsigned(options->context), options->subject, options->key, options->type, options->size, options->value);
             if (options->context == LV2_OPTIONS_INSTANCE)
             {
                 if ((options->key == minBufSz || options->key == maxBufSz) && options->type == _atom_int)
                 {
                     uint32_t bufSz = *static_cast<const uint32_t *>(options->value);
+                    yoshimiLV2Trace("buffer size option=%u", bufSz);
                     if (_bufferSize < bufSz)
                         _bufferSize = bufSz;
                 }
@@ -391,6 +416,7 @@ YoshimiLV2Plugin::YoshimiLV2Plugin(SynthEngine& _synth
     runtime().isLV2 = true;
     runtime().isMultiFeed = isMultiFeed(lv2Desc);
     synth.setBPMAccurate(true);
+    yoshimiLV2Trace("plugin constructor complete: buffer=%u nominal=%u multi=%d", _bufferSize, nomBufSize, runtime().isMultiFeed);
 }
 
 
@@ -398,7 +424,15 @@ YoshimiLV2Plugin::YoshimiLV2Plugin(SynthEngine& _synth
 /** create a new distinct Yoshimi plugin instance; `activate()` will be called prior to `run()`. */
 LV2_Handle YoshimiLV2Plugin::instantiate(LV2_Descriptor const* desc, double sample_rate, const char *bundle_path, LV2_Feature const *const *features)
 {
-    YoshimiLV2Plugin* instance;
+    yoshimiLV2Trace("instantiate enter: descriptor=%p URI=%s rate=%.17g bundle=%s features=%p",
+        desc, desc ? desc->URI : "<null>", sample_rate, bundle_path ? bundle_path : "<null>", features);
+    yoshimiLV2TraceEnvironment();
+    traceHostFeatures("instantiate", features);
+#ifdef _WIN32
+    try
+    {
+#endif
+    YoshimiLV2Plugin* instance = nullptr;
     auto instantiatePlugin = [&](SynthEngine& synth) -> MusicIO*
                                 {
                                     instance = new YoshimiLV2Plugin(synth, sample_rate, bundle_path, features, *desc);
@@ -409,20 +443,42 @@ LV2_Handle YoshimiLV2Plugin::instantiate(LV2_Descriptor const* desc, double samp
     {
         assert(instance);
         instance->isReady.store(true, std::memory_order_release); // after this point, GUI-plugin may attach
+        yoshimiLV2Trace("instantiate success: handle=%p", instance);
         return static_cast<LV2_Handle>(instance);
     }
     else
+    {
+        yoshimiLV2Trace("instantiate FAILED: startPluginInstance returned false");
         return nullptr;
+    }
+#ifdef _WIN32
+    }
+    catch (const std::exception& error)
+    {
+        yoshimiLV2Trace("instantiate C++ EXCEPTION: %s", error.what());
+        return nullptr;
+    }
+    catch (...)
+    {
+        yoshimiLV2Trace("instantiate UNKNOWN C++ EXCEPTION");
+        return nullptr;
+    }
+#endif
 }
 
 /** Initialise the plugin instance and activate it for use. */
 void YoshimiLV2Plugin::activate(LV2_Handle h)
 {
+    yoshimiLV2Trace("activate: handle=%p", h);
     self(h).runtime().Log("Yoshimi LV2 plugin activated");
 }
 
 void YoshimiLV2Plugin::run(LV2_Handle h, uint32_t sample_count)
 {
+#if defined(_WIN32) && defined(YOSHIMI_LV2_WINDOWS_DIAGNOSTICS)
+    static std::atomic<bool> first{true};
+    if (first.exchange(false)) yoshimiLV2Trace("first run: handle=%p frames=%u", h, sample_count);
+#endif
     self(h).process(sample_count);
 }
 
@@ -434,22 +490,28 @@ void YoshimiLV2Plugin::deactivate(LV2_Handle h)
 /** called by LV2 host to destroy a plugin instance */
 void YoshimiLV2Plugin::cleanup(LV2_Handle h)
 {
+    yoshimiLV2Trace("cleanup enter: handle=%p", h);
     auto synthID = self(h).synth.getUniqueId();
     Config::instances().terminatePluginInstance(synthID);
+    yoshimiLV2Trace("cleanup complete: synthID=%u", synthID);
 }
 
 
 
 bool YoshimiLV2Plugin::openAudio()
 {
+    yoshimiLV2Trace("openAudio enter: map=%d rate=%u buffer=%u MIDI=%u state=%u string=%u",
+        _uridMap.map != nullptr, _sampleRate, _bufferSize, _midi_event_id,
+        _midi_event_id ? _yoshimi_state_id : 0, _midi_event_id ? _atom_string_id : 0);
     bool validSettings = not (_uridMap.map == NULL
                              or _sampleRate == 0
                              or _bufferSize == 0
                              or _midi_event_id == 0
                              or _yoshimi_state_id == 0
                              or _atom_string_id == 0);
-    return validSettings
-       and prepBuffers();
+    bool result = validSettings and prepBuffers();
+    yoshimiLV2Trace("openAudio result=%d validSettings=%d", result, validSettings);
+    return result;
 }
 
 bool YoshimiLV2Plugin::openMidi()
@@ -470,6 +532,7 @@ bool YoshimiLV2Plugin::Start()
 
 void YoshimiLV2Plugin::connect_port(LV2_Handle handle, uint32_t port, void* data_location)
 {
+    yoshimiLV2Trace("connect_port: handle=%p port=%u data=%p", handle, port, data_location);
     if (port > NUM_MIDI_PARTS + 2)
         return;
     YoshimiLV2Plugin& plugin = self(handle);
@@ -522,6 +585,7 @@ LV2_Programs_Interface yoshimi_prg_iface =
 
 const void *YoshimiLV2Plugin::extension_data(const char *uri)
 {
+    yoshimiLV2Trace("plugin extension_data URI=%s", uri);
     static const LV2_State_Interface state_iface = { YoshimiLV2Plugin::callback_stateSave, YoshimiLV2Plugin::callback_stateRestore };
     if (!strcmp(uri, LV2_STATE__interface))
     {
@@ -559,6 +623,7 @@ LV2_State_Status YoshimiLV2Plugin::stateSave(LV2_State_Store_Function store, LV2
 
 LV2_State_Status YoshimiLV2Plugin::stateRestore(LV2_State_Retrieve_Function retrieve, LV2_State_Handle handle, uint32_t flags, const LV2_Feature * const *features)
 {
+    yoshimiLV2Trace("stateRestore enter flags=%u", flags);
     uint32_t a = flags; flags = a;
     const LV2_Feature * const *feat = features;
     features = feat;
@@ -572,6 +637,7 @@ LV2_State_Status YoshimiLV2Plugin::stateRestore(LV2_State_Retrieve_Function retr
 
     if (sz > 0)
         runtime().restoreSessionData(data, sz);
+    yoshimiLV2Trace("stateRestore complete: data=%p bytes=%llu type=%u", data, static_cast<unsigned long long>(sz), type);
     return LV2_STATE_SUCCESS;
 }
 
@@ -726,9 +792,12 @@ LV2UI_Handle YoshimiLV2PluginUI::instantiate(LV2UI_Descriptor const*, const char
                                              LV2UI_Write_Function write_function, LV2UI_Controller controller,
                                              LV2UI_Widget* widget, const LV2_Feature * const *features)
 {
+    yoshimiLV2Trace("UI instantiate enter: bundle=%s features=%p", bundle_path, features);
+    traceHostFeatures("UI instantiate", features);
     YoshimiLV2PluginUI* uiinst = new YoshimiLV2PluginUI(bundle_path, write_function, controller, widget, features);
     if (uiinst->init())
     {
+        yoshimiLV2Trace("UI instantiate success handle=%p", uiinst);
         return static_cast<LV2UI_Handle>(uiinst);
     }
     else
@@ -757,6 +826,7 @@ LV2UI_Idle_Interface yoshimi_lv2ui_idle_interface_desc =
 
 const void *YoshimiLV2PluginUI::extension_data(const char *uri)
 {
+    yoshimiLV2Trace("UI extension_data URI=%s", uri);
     if (strcmp(uri, LV2_UI__showInterface) == 0) {
         return &yoshimi_lv2ui_show_interface_desc;
     } else if (strcmp(uri, LV2_UI__idleInterface) == 0) {
@@ -822,8 +892,10 @@ void YoshimiLV2PluginUI::initFltkLock()
 
 
 /** Entry point for the Host to discover and load the core plugin */
-extern "C" const LV2_Descriptor* lv2_descriptor(uint32_t index)
+LV2_SYMBOL_EXPORT const LV2_Descriptor* lv2_descriptor(uint32_t index)
 {
+    yoshimiLV2Trace("lv2_descriptor index=%u", index);
+    if (index == 0) yoshimiLV2TraceEnvironment();
     switch (index)
     {
     case 0:
@@ -839,7 +911,7 @@ extern "C" const LV2_Descriptor* lv2_descriptor(uint32_t index)
 
 LV2UI_Descriptor yoshimi_lv2ui_desc =
 {
-    "http://yoshimi.sourceforge.net/lv2_plugin#ExternalUI",
+    YOSHIMI_LV2_PLUGIN_URI "#ExternalUI",
     YoshimiLV2PluginUI::instantiate,
     YoshimiLV2PluginUI::cleanup,
     NULL,
@@ -848,8 +920,9 @@ LV2UI_Descriptor yoshimi_lv2ui_desc =
 
 
 /** Entry point for the Host to discover and load the associated GUI plugin */
-extern "C" const LV2UI_Descriptor* lv2ui_descriptor(uint32_t index)
+LV2_SYMBOL_EXPORT const LV2UI_Descriptor* lv2ui_descriptor(uint32_t index)
 {
+    yoshimiLV2Trace("lv2ui_descriptor index=%u", index);
     switch (index)
     {
     case 0:

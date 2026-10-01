@@ -46,6 +46,13 @@ inline std::string asString(long long n)
    return std::string(oss.str());
 }
 
+inline std::string asString(unsigned long long n)
+{
+   std::ostringstream oss;
+   oss << n;
+   return std::string(oss.str());
+}
+
 
 inline std::string asString(unsigned long n)
 {

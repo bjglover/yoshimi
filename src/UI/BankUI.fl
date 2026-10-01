@@ -38,6 +38,9 @@ decl {\#include <unistd.h>} {public local
 decl {\#include <iostream>} {public local
 }
 
+decl {\#include <cstdint>} {public local
+}
+
 decl {\#include <string>
     using std::string;} {public local
 }
@@ -331,7 +334,7 @@ class BankUI {: {public BankProcess_, RootProcess_}
             return;
 
         const Fl_Menu_Item &item = o->menu()[n];
-        int nbank = reinterpret_cast<long>(item.user_data());
+        int nbank = static_cast<int>(reinterpret_cast<std::intptr_t>(item.user_data()));
         send_data(TOPLEVEL::action::lowPrio | TOPLEVEL::action::forceUpdate, BANK::control::selectBank, nbank, TOPLEVEL::type::Integer, TOPLEVEL::section::bank);}
         xywh {5 8 199 20} down_box BORDER_BOX selection_color 7 labelfont 1 labelsize 12 labelcolor 64 align 0 textsize 12 textcolor 64
       } {}
@@ -790,7 +793,7 @@ class BankUI {: {public BankProcess_, RootProcess_}
         activatebutton_rootdir(tmp!=0);
         if (tmp)
         {
-            selectedRootID = reinterpret_cast<long>(o->data(tmp));
+            selectedRootID = static_cast<int>(reinterpret_cast<std::intptr_t>(o->data(tmp)));
         }
 
         changeIDbutton->value(recoverID());
@@ -1795,7 +1798,7 @@ class BankUI {: {public BankProcess_, RootProcess_}
             {
                 tmp += " *";
             }
-            rootsbrowse->add(tmp.c_str(), reinterpret_cast<void *>(static_cast<long>(it->first)));
+            rootsbrowse->add(tmp.c_str(), reinterpret_cast<void *>(static_cast<std::intptr_t>(it->first)));
         }
     }} {}
   }
