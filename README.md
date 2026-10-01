@@ -1,52 +1,65 @@
-## Yoshimi
+# Yoshimi — Experimental Windows LV2 Port
 
-Yoshimi is a software audio synthesizer, currently only available for Linux.
+This repository contains an experimental native x86-64 Windows LV2 port
+of the Yoshimi software synthesizer, based on Yoshimi 2.3.6.5.
 
-### Experimental Windows LV2 port
+The Windows port uses the existing Yoshimi synth engine and FLTK user
+interface and has been built using MSYS2/UCRT64.
 
-This branch contains an experimental native x86-64 Windows LV2 port of Yoshimi 2.3.6.5.
+## Download
 
-The Windows LV2 has been built with MSYS2/UCRT64 and manually tested in REAPER with the FLTK user interface, MIDI/audio, and factory patch banks.
+A ready-to-use Windows LV2 bundle is available from the
+[experimental GitHub release](https://github.com/bjglover/yoshimi/releases/tag/windows-lv2-experimental-20260930c).
 
-A ready-to-use Windows LV2 bundle is available from the [experimental GitHub release](https://github.com/bjglover/yoshimi/releases/tag/windows-lv2-experimental-20260930c).
+No MSYS2 or development tools are required to use the compiled LV2.
 
-Documentation:
+### Installation
 
-* [Windows LV2 implementation report](YOSHIMI_WINDOWS_LV2_PORT_REPORT.md)
-* [Windows build and toolchain setup](YOSHIMI_WINDOWS_TOOLCHAIN_SETUP.md)
+1. Download and extract the release ZIP.
+2. Copy the complete `yoshimi-windows-resources-20260930c.lv2` folder to:
 
-This is an experimental port and is not an official Yoshimi Windows release.
+   `%APPDATA%\LV2\`
 
-### Current version
+3. Restart or rescan your LV2 host.
+4. Look for **Yoshimi Windows Resources Test**.
 
-Version 2.3.6
+Keep the complete `.lv2` folder intact, including its `resources` directory.
 
+## Current test status
 
-* New feature: Kit Mode now has a crossfade Volume option as well as Velocity.
+The Windows LV2 has been manually tested in REAPER with:
 
-* New feature: Yoshimi now recognises old and new versions of MXML and FLTK.
+- plugin discovery and loading
+- the FLTK user interface
+- MIDI input and audio output
+- factory patch banks
+- 24 banks / 917 instruments
+- arpeggio patches
 
-* New feature: Yoshimi car run on the wayland windowng system without issues.
+This remains an experimental port. Wider testing with other Windows
+LV2 hosts, project/state restoration, multiple instances, automation
+and long-running sessions is still useful.
 
-* Various code refinements.
+## Technical documentation
 
-### Building
+- [Windows LV2 implementation and verification report](YOSHIMI_WINDOWS_LV2_PORT_REPORT.md)
+- [Windows build and toolchain setup](YOSHIMI_WINDOWS_TOOLCHAIN_SETUP.md)
 
-Full build instructions are in [INSTALL](INSTALL).
+The toolchain document contains instructions for building the Windows
+LV2 from source using MSYS2/UCRT64.
 
-### Source
+## Upstream Yoshimi
 
-Yoshimi source code is available from either:
+This project is a Windows LV2 port of
+[Yoshimi](https://github.com/Yoshimi/yoshimi).
 
-* Sourceforge: https://sourceforge.net/projects/yoshimi
-* Github: https://github.com/Yoshimi/yoshimi
+The original Yoshimi project, Linux build instructions, project history,
+community information and current upstream development can be found in
+the upstream repository.
 
-### Community
+This Windows port is experimental and is not an official Yoshimi
+Windows release.
 
-Our list archive is at: https://www.freelists.org/archive/yoshimi
+## License
 
-To post, email to: yoshimi@freelists.org
-
-### License
-
-GPLv2+ see [COPYING](COPYING) for license details.
+Yoshimi is licensed under GPLv2+. See [COPYING](COPYING) for details.
